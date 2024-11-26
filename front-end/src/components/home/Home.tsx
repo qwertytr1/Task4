@@ -9,13 +9,11 @@ const Home: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [selectAll, setSelectAll] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [deletingIds, setDeletingIds] = useState<number[]>([]);
   const [selectedUsersData, setSelectedUsersData] = useState<User[]>([]); // Состояние для выбранных пользователей
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [userToken, setUserToken] = useState<string | null>(null);
-  const [userDData, setUserDData] = useState<User | null>(null);
+  const [dataUser, setDataUser] = useState<User | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('authToken');
@@ -24,7 +22,7 @@ const Home: React.FC = () => {
       setUserToken(token);
     }
     if (userData) {
-      setUserDData(JSON.parse(userData));
+      setDataUser(JSON.parse(userData));
     }
   }, []);
 
@@ -49,7 +47,6 @@ const Home: React.FC = () => {
       setUsers(formattedData);
     } catch (error) {
       console.error(error);
-      alert('Error fetching users. Please try again later.');
     }
   }, [userToken]);
 
@@ -88,21 +85,14 @@ const Home: React.FC = () => {
         .filter((user): user is User => user !== undefined);
 
       setSelectedUsersData(updatedSelectedUsersData);
-
-      updatedSelectedUsersData.forEach((user) => {
-        if (user.email === userDData?.email) {
-          console.log('Ура! Email совпадает');
-        }
-      });
     },
-    [selectedIds, users, userDData],
+    [selectedIds, users],
   );
 
   const handleBlockUsers = useCallback(async () => {
-    const userEmail = userDData?.email;
+    const userEmail = dataUser?.email;
 
     if (!userEmail) {
-      alert('User email is missing. Please login again.');
       return;
     }
 
@@ -161,9 +151,8 @@ const Home: React.FC = () => {
       }
     } catch (error) {
       console.error('Error while blocking users:', error);
-      alert('Failed to block users. Please try again.');
     }
-  }, [selectedUsersData, navigate, userDData, userToken]);
+  }, [selectedUsersData, navigate, dataUser, userToken]);
 
   const handleUnblockUsers = async () => {
     try {
@@ -180,8 +169,6 @@ const Home: React.FC = () => {
         throw new Error('Failed to unblock users.');
       }
 
-      alert('Selected users have been unblocked.');
-
       setUsers((prevUsers) =>
         prevUsers.map((user) =>
           selectedIds.includes(user.id) ? { ...user, status: 'active' } : user,
@@ -195,12 +182,7 @@ const Home: React.FC = () => {
   };
 
   const handleDelete = useCallback(async () => {
-    if (selectedIds.length === 0) {
-      alert('No users selected for deletion.');
-      return;
-    }
-
-    const userEmail = userDData?.email; // Текущий пользователь
+    const userEmail = dataUser?.email;
     const selectedUsersEmails = selectedIds
       .map((id) => users.find((user) => user.id === id)?.email)
       .filter((email): email is string => email !== undefined);
@@ -225,33 +207,16 @@ const Home: React.FC = () => {
       alert(result.message);
 
       setUsers(result.users);
-      setSelectedIds([]); // Сброс выбора
-      setSelectAll(false); // Сброс выбора всех
+      setSelectedIds([]);
+      setSelectAll(false);
 
       if (isCurrentUserDeleting) {
-        // Если удаляется текущий пользователь, перенаправляем на логин
-        alert('Your account has been deleted. Redirecting to login.');
         handleLogout();
       }
     } catch (error) {
       console.error('Error while deleting users:', error);
-      alert('Failed to delete users. Please try again.');
     }
-  }, [selectedIds, users, userDData, userToken, handleLogout]);
-
-  const openDeleteModal = useCallback(() => {
-    if (selectedIds.length === 0) {
-      alert('No users selected for deletion.');
-      return;
-    }
-    setDeletingIds(selectedIds);
-    setShowModal(true);
-  }, [selectedIds]);
-
-  const closeModal = useCallback(() => {
-    setShowModal(false);
-    setDeletingIds([]);
-  }, []);
+  }, [selectedIds, users, dataUser, userToken, handleLogout]);
 
   const sortUsers = (
     usersList: User[],
@@ -260,17 +225,16 @@ const Home: React.FC = () => {
   ): User[] => {
     const parseDate = (value: string | null | 'Never'): number => {
       if (value === 'Never' || value === null) {
-        return 0; // Если 'Never' или null, считаем их минимальными
+        return 0;
       }
       const date = new Date(value);
-      return Number.isNaN(date.getTime()) ? 0 : date.getTime(); // Используем Number.isNaN
+      return Number.isNaN(date.getTime()) ? 0 : date.getTime();
     };
 
     return [...usersList].sort((a, b) => {
       const valueA = parseDate(a[criteria]);
       const valueB = parseDate(b[criteria]);
 
-      // Сравниваем значения
       if (valueA < valueB) return ascending ? -1 : 1;
       if (valueA > valueB) return ascending ? 1 : -1;
       return 0;
@@ -297,17 +261,21 @@ const Home: React.FC = () => {
         </button>
         <button
           type="button"
-          className="btn btn-outline-secondary me-3"
+          className="btn btn-outline-primary me-3"
           onClick={handleUnblockUsers}
+          title="Unblock Users"
+          aria-label="Unblock"
         >
-          Unblock
+          <i className="bi bi-unlock" />
         </button>
         <button
           type="button"
           className="btn btn-outline-danger"
-          onClick={openDeleteModal}
+          onClick={handleDelete}
+          title="Delete Users"
+          aria-label="Delete"
         >
-          Delete
+          <i className="bi bi-trash" />
         </button>
       </div>
       <table className="table table-striped table-bordered">
@@ -348,52 +316,6 @@ const Home: React.FC = () => {
           ))}
         </tbody>
       </table>
-
-      {/* Display selected users' data */}
-      {selectedUsersData.length > 0 && (
-        <div className="selected-users-info">
-          <h3>Selected Users</h3>
-          <ul>
-            {selectedUsersData.map((user) => (
-              <li key={user.id}>
-                <strong>{user.name}</strong> (ID: {user.id}, Email: {user.email}
-                , Last Login: {user.lastLogin})
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {showModal && (
-        <div className="modal d-block" tabIndex={-1} aria-hidden="true">
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Delete User(s)</h5>
-              </div>
-              <div className="modal-body">
-                <p>Are you sure you want to delete the selected users?</p>
-              </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={closeModal}
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  onClick={handleDelete}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

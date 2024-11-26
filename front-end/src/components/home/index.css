@@ -1,145 +1,123 @@
-/* styles.css */
 body {
-    font-family: 'Arial', sans-serif;
-    background-color: #f0f8ff; /* Нежно-голубой фон страницы */
-    margin: 0;
-    padding: 0;
-    color: #333;
-  }
-  .logout-container {
-    display: flex;
-    justify-content: flex-end; /* Выравнивание кнопки по правому краю */
-    margin-bottom: 20px; /* Отступ снизу, чтобы отделить от контента */
-  }
+  font-family: 'Arial', sans-serif;
+  background-color: #f0f8ff;
+  margin: 0;
+  padding: 0;
+  color: #333;
+}
 
-  .logout-container button {
-    background-color: #dc3545; /* Красный фон для кнопки */
-    color: #ffffff; /* Белый текст */
-    font-size: 14px;
-    padding: 8px 15px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-  }
+.logout-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 20px;
+}
 
-  .logout-container button:hover {
-    background-color: #b02a37; /* Более темный красный при наведении */
-  }
-  .container {
-    max-width: 1200px;
-    margin: 20px auto;
-    padding: 20px;
-    background-color: #ffffff; /* Белый фон для контейнера */
-    border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Легкая тень */
-  }
+.logout-container button {
+  background-color: #dc3545;
+  color: #ffffff;
+  font-size: 14px;
+  padding: 8px 15px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
 
-  h1 {
-    text-align: center;
-    color: #1e3a8a; /* Темно-синий оттенок для заголовка */
-    margin-bottom: 20px;
-  }
+.logout-container button:hover {
+  background-color: #b02a37;
+}
 
-  .table {
-    width: 100%;
-    margin-top: 20px;
-    border-collapse: collapse;
-    background-color: #f9fafb; /* Очень светлый фон таблицы */
-  }
+.container {
+  max-width: 1200px;
+  margin: 20px auto;
+  padding: 20px;
+  background-color: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
 
-  .table thead {
-    background-color: #ecff81; /* Насыщенный синий фон заголовка таблицы */
-    color: #ffffff; /* Белый текст */
-  }
+h1 {
+  text-align: center;
+  color: #1e3a8a;
+  margin-bottom: 20px;
+}
 
-  .table th,
-  .table td {
-    text-align: left;
-    padding: 12px 15px;
-    border: 1px solid #e5e7eb; /* Светло-серый цвет для рамок */
-  }
+.table {
+  width: 100%;
+  margin-top: 20px;
+  border-collapse: collapse;
+  background-color: #f9fafb;
+}
 
-  .table tr:nth-child(even) {
-    background-color: #e0f2fe; /* Голубой оттенок для четных строк */
-  }
+.table thead {
+  background-color: #ecff81;
+  color: #ffffff;
+}
 
-  .table tr:hover {
-    background-color: #bfdbfe; /* Бледно-голубой оттенок при наведении */
-    transition: background-color 0.3s;
-  }
+.table th,
+.table td {
+  text-align: left;
+  padding: 12px 15px;
+  border: 1px solid #e5e7eb;
+}
 
-  .table th {
-    font-size: 16px;
-  }
+.table tr:nth-child(even) {
+  background-color: #e0f2fe;
+}
 
-  .table td {
-    font-size: 14px;
-  }
+.table tr:hover {
+  background-color: #bfdbfe;
+  transition: background-color 0.3s;
+}
 
-  .table-bordered {
-    border: 2px solid #2563eb; /* Синий бордюр вокруг таблицы */
-  }
+.table th {
+  font-size: 16px;
+}
 
-  .mt-4 {
-    margin-top: 40px;
-  }
+.table td {
+  font-size: 14px;
+}
 
-  /* Кнопка обновления (если добавите такую) */
-  button {
-    background-color: #2563eb; /* Синий цвет фона */
-    color: #ffffff;
-    border: none;
-    border-radius: 5px;
-    padding: 10px 20px;
-    cursor: pointer;
-    font-size: 16px;
-  }
+.table-bordered {
+  border: 2px solid #2563eb;
+}
 
-  button:hover {
-    background-color: #1e40af; /* Более темный синий при наведении */
-    transition: background-color 0.3s;
-  }
+.mt-4 {
+  margin-top: 40px;
+}
 
-  .table th:first-child,
-  .table td:first-child {
-    width: 40px;
-    text-align: center;
-  }
+button {
+  background-color: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 5px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 16px;
+}
 
-  .table th {
-    background-color: #2563eb; /* Синий фон заголовков таблицы */
-    color: #ffffff;
-  }
+button:hover {
+  background-color: #1e40af;
+  transition: background-color 0.3s;
+}
 
-  .table td {
-    text-align: left;
-  }
+.table th:first-child,
+.table td:first-child {
+  width: 40px;
+  text-align: center;
+}
 
-  .table tr:hover {
-    background-color: #f1f5f9; /* Светлый фон при наведении */
-  }
+.table th {
+  background-color: #2563eb;
+  color: #ffffff;
+}
 
-  button.btn-outline-secondary i,
-  button.btn-outline-danger i {
-    font-size: 1.2em;
-  }
-  .toolbar {
-    margin-bottom: 20px; /* Увеличиваем отступ для разделения */
-    gap: 8px; /* Немного уменьшаем зазор между кнопками */
-  }
+.toolbar {
+  margin-bottom: 20px;
+}
 
-  .toolbar button {
-    display: inline-flex
-;
-    align-items: center;
-    /* gap: 5px; */
-    font-size: 15px;
-    padding: 8px 15px;
-    margin: 0px 5px;
-  }
-
-  /* Уменьшаем размеры иконок */
-  .toolbar button i {
-    font-size: 1em;
-  }
+.toolbar button {
+  font-size: 15px;
+  padding: 8px 15px;
+  margin: 0px 5px;
+}

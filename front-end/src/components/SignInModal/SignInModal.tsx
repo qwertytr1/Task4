@@ -26,7 +26,6 @@ function SignInModal() {
         .post('http://localhost:8081/login', values)
         .then((res) => {
           const { Status, token, User } = res.data;
-          console.log(User);
           if (Status === 'Success' && token) {
             // Сохраняем token и данные пользователя в localStorage
             localStorage.setItem('authToken', token);

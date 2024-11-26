@@ -14,8 +14,19 @@ const db = mysql.createConnection({
 });
 
 const SECRET_KEY = "123";
+const updateLastLogin = (userId) => {
+  return new Promise((resolve, reject) => {
+    const sql = "UPDATE users SET last_login = NOW() WHERE id = ?";
+    db.query(sql, [userId], (err) => {
+      if (err) {
+        console.error("Error updating last login:", err);
+        return reject(err);
+      }
+      resolve();
+    });
+  });
+};
 
-// Простой middleware для аутентификации через токен
 const authenticateToken = (req, res, next) => {
   const token = req.headers["authorization"]?.split(" ")[1]; // Извлекаем токен из заголовка Authorization
   if (!token) {
@@ -39,9 +50,6 @@ app.post("/register", (req, res) => {
     return res.status(400).json({ message: "Missing required fields" });
   }
 
-  // Генерация токена
-  const token = jwt.sign({ email }, SECRET_KEY, { expiresIn: "7d" });
-
   const sql = "INSERT INTO users (`username`, `email`, `password`, `status`, `token`) VALUES (?)";
   const values = [username, email, password, "active", token];
 
@@ -61,7 +69,7 @@ app.post("/login", (req, res) => {
   const { email, password } = req.body;
 
   const sql = "SELECT * FROM users WHERE email = ? AND password = ?";
-  db.query(sql, [email, password], (err, result) => {
+  db.query(sql, [email, password], async (err, result) => {
     if (err) {
       console.error("Database error:", err);
       return res.status(500).json({ Status: "Error", message: "Internal server error" });
@@ -81,6 +89,14 @@ app.post("/login", (req, res) => {
     // Генерация JWT токена
     const token = jwt.sign({ id: user.id, email: user.email }, SECRET_KEY, { expiresIn: "7d" });
 
+    try {
+      // Обновление времени последнего входа
+      await updateLastLogin(user.id);
+    } catch (updateError) {
+      console.error("Failed to update last login time:", updateError);
+      return res.status(500).json({ Status: "Error", message: "Failed to update last login time" });
+    }
+
     res.status(200).json({
       Status: "Success",
       token,
@@ -93,7 +109,6 @@ app.post("/login", (req, res) => {
   });
 });
 
-// Блокировка пользователей
 app.post("/users/block", authenticateToken, (req, res) => {
   const { emails } = req.body; // Получаем 'emails' из тела запроса
 
@@ -126,15 +141,14 @@ app.post("/users/block", authenticateToken, (req, res) => {
   });
 });
 
-// Получение списка пользователей
 app.get('/users', authenticateToken, (req, res) => {
-  const sql = "SELECT id, username AS name, email, last_login AS lastLogin, status, token FROM users";
+  const sql = "SELECT id, username AS name, email, last_login AS lastLogin, status, token FROM users ORDER BY last_login DESC";
   db.query(sql, (err, result) => {
     if (err) {
       console.error("Error fetching users:", err);
       return res.status(500).send("Internal server error");
     }
-    res.json(result);  // Ответ с данными пользователей
+    res.json(result);
   });
 });
  app.post("/users/unblock", (req, res) => {
@@ -155,37 +169,46 @@ app.get('/users', authenticateToken, (req, res) => {
       res.status(200).json({ message: `${result.affectedRows} users unblocked successfully.` });
     });
  });
-  // Удаление пользователей
-app.post("/users/delete", authenticateToken, (req, res) => {
-  const { ids } = req.body; // Получаем 'ids' из тела запроса
 
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return res.status(400).json({ message: "Invalid request. 'ids' must be a non-empty array." });
-  }
+  app.post("/users/delete", authenticateToken, (req, res) => {
+    const { ids } = req.body;а
 
-  const deleteSql = "DELETE FROM users WHERE id IN (?)";
-  db.query(deleteSql, [ids], (err, result) => {
-    if (err) {
-      console.error("Database error:", err);
-      return res.status(500).json({ message: "Internal server error." });
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: "Invalid request. 'ids' must be a non-empty array." });
     }
 
-    const affectedRows = result.affectedRows;
-
-    const fetchAllUsersSql = "SELECT id, username AS name, email, last_login AS lastLogin, status FROM users";
-    db.query(fetchAllUsersSql, (err, allUsersResult) => {
+    const deleteSql = "DELETE FROM users WHERE id IN (?)";
+    db.query(deleteSql, [ids], (err, result) => {
       if (err) {
-        console.error("Error fetching updated users:", err);
-        return res.status(500).json({ message: "Error fetching updated user list." });
+        console.error("Database error:", err);
+        return res.status(500).json({ message: "Internal server error." });
       }
 
-      res.status(200).json({
-        message: `${affectedRows} users deleted successfully.`,
-        users: allUsersResult,
+      const affectedRows = result.affectedRows;
+
+      if (affectedRows > 0) {
+        const resetAutoIncrementSql = "ALTER TABLE users AUTO_INCREMENT = 1";
+        db.query(resetAutoIncrementSql, (err) => {
+          if (err) {
+            console.error("Error resetting auto-increment:", err);
+          }
+        });
+      }
+
+      const fetchAllUsersSql = "SELECT id, username AS name, email, last_login AS lastLogin, status FROM users";
+      db.query(fetchAllUsersSql, (err, allUsersResult) => {
+        if (err) {
+          console.error("Error fetching updated users:", err);
+          return res.status(500).json({ message: "Error fetching updated user list." });
+        }
+
+        res.status(200).json({
+          message: `${affectedRows} users deleted successfully.`,
+          users: allUsersResult,
+        });
       });
     });
   });
-});
 
 app.listen(8081, () => {
   console.log("Server is running on port 8081");

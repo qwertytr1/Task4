@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Form from 'react-bootstrap/Form';
 import Button from 'react-bootstrap/Button';
-import './CreateAccount.css';
+import '../SignInModal/SignInModal.css';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -20,8 +20,6 @@ function CreateAccountPage() {
     axios
       .post('http://localhost:8081/register', { username, email, password })
       .then((response) => {
-        const { token } = response.data; // Получаем токен из ответа
-        console.log('Registration successful. Token:', token); // Выводим токен в консоль
         navigate('/login', { state: { email, password } });
       })
       .catch((err) => {

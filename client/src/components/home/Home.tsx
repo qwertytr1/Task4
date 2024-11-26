@@ -100,7 +100,7 @@ const Home: React.FC = () => {
       const emailsToBlock = selectedUsersData.map((user) => user.email);
 
       if (emailsToBlock.includes(userEmail)) {
-        const response = await fetch('http://localhost:8081/users/block', {
+        const response = await fetch('https://task4-server-qwertytr1s-projects.vercel.app/block', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -125,7 +125,7 @@ const Home: React.FC = () => {
 
         navigate('/login');
       } else {
-        const response = await fetch('http://localhost:8081/users/block', {
+        const response = await fetch('https://task4-server-qwertytr1s-projects.vercel.app/block', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -156,7 +156,7 @@ const Home: React.FC = () => {
 
   const handleUnblockUsers = async () => {
     try {
-      const response = await fetch('http://localhost:8081/users/unblock', {
+      const response = await fetch('https://task4-server-qwertytr1s-projects.vercel.app/unblock', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -190,7 +190,7 @@ const Home: React.FC = () => {
     const isCurrentUserDeleting = selectedUsersEmails.includes(userEmail || '');
 
     try {
-      const response = await fetch('http://localhost:8081/users/delete', {
+      const response = await fetch('https://task4-server-qwertytr1s-projects.vercel.app/delete', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -19,7 +19,9 @@ function CreateAccountPage() {
 
     axios
       .post('http://localhost:8081/register', { username, email, password })
-      .then(() => {
+      .then((response) => {
+        const { token } = response.data; // Получаем токен из ответа
+        console.log('Registration successful. Token:', token); // Выводим токен в консоль
         navigate('/login', { state: { email, password } });
       })
       .catch((err) => {
@@ -30,7 +32,7 @@ function CreateAccountPage() {
             'An error occurred during registration. Please try again.',
           );
         }
-        console.error(err); // fffff
+        console.error(err);
       });
   }
 

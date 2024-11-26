@@ -1,7 +1,7 @@
 import express from "express";
 import mysql from "mysql2";
 import cors from "cors";
-
+import jwt from "jsonwebtoken";
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -25,43 +25,140 @@ const updateLastLogin = (userId) => {
     });
   });
 };
-
+const SECRET_KEY = "123";
 app.post("/register", (req, res) => {
-    const { username, email, password } = req.body;
+  const { username, email, password } = req.body;
 
-    const sql = "INSERT INTO users (`username`, `email`, `password`, `status`) VALUES (?)";
-    const values = [username, email, password, 'active', new Date()];
+  if (!email || !username || !password) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
 
-    db.query(sql, [values], (err) => {
-      if (err) {
-        if (err.code === "ER_DUP_ENTRY") {
-          return res.status(409).json({ message: "Email is already in use." });
-        }
-        return res.status(500).json({ message: "Database error" });
+  // Генерация токена
+  const token = jwt.sign({ email }, SECRET_KEY, { expiresIn: "7d" });
+
+  const sql = "INSERT INTO users (`username`, `email`, `password`, `status`, `token`) VALUES (?)";
+  const values = [username, email, password, "active", token];
+
+  db.query(sql, [values], (err) => {
+    if (err) {
+      if (err.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({ message: "Email is already in use." });
       }
-      return res.status(200).json({ message: "User registered successfully" });
-    });
+      console.error(err); // Вывод ошибки в консоль
+      return res.status(500).json({ message: "Database error" });
+    }
+    return res.status(200).json({ message: "User registered successfully", token });
   });
+});
 
-app.post("/users/block", (req, res) => {
-    const { ids } = req.body;
+app.post("/login", (req, res) => {
+  const { email, password } = req.body;
 
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: "Invalid request. 'ids' must be a non-empty array." });
+  const sql = "SELECT * FROM users WHERE email = ? AND password = ?";
+  db.query(sql, [email, password], (err, result) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ Status: "Error", message: "Internal server error" });
     }
 
-    const sql = "UPDATE users SET status = 'blocked' WHERE id IN (?)";
+    if (result.length === 0) {
+      return res.status(401).json({ Status: "Error", message: "Invalid email or password" });
+    }
 
-    db.query(sql, [ids], (err, result) => {
+    const user = result[0];
+
+    // Проверка заблокированного статуса
+    if (user.status === "blocked") {
+      return res.status(403).json({ Status: "Error", message: "Account is blocked" });
+    }
+
+    // Генерация токена
+    const token = jwt.sign({ id: user.id, email: user.email }, SECRET_KEY, { expiresIn: "7d" });
+
+    res.status(200).json({
+      Status: "Success",
+      token,
+      User: {
+        id: user.id,
+        email: user.email,
+        status: user.status,
+      },
+    });
+
+    updateLastLogin(user.id).catch((err) => console.error("Failed to update last login:", err));
+  });
+});
+
+// Middleware для проверки токена
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  jwt.verify(token, SECRET_KEY, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    req.user = user;
+    next();
+  });
+};
+app.post("/users/block", (req, res) => {
+  const { ids, token } = req.body; // Ожидаем 'ids' и 'token' в теле запроса
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ message: "Invalid request. 'ids' must be a non-empty array." });
+  }
+
+  if (!token) {
+    return res.status(400).json({ message: "Token is required." });
+  }
+
+  // Запрос к базе данных для получения пользователя по токену
+  const sql = "SELECT id, token FROM users WHERE token = ?";
+  db.query(sql, [token], (err, result) => {
+    if (err) {
+      return res.status(500).json({ message: "Internal server error." });
+    }
+
+    if (result.length === 0) {
+      return res.status(401).json({ message: "Invalid token." });
+    }
+
+    const currentUserId = result[0].id; // Получаем id пользователя из базы данных
+    const currentUserToken = result[0].token; // Получаем токен из базы данных
+
+    // Сравнение токенов
+    if (token === currentUserToken) {
+      console.log('Tokens match!'); // Выводим сообщение, если токены совпадают
+    } else {
+      console.log('Tokens do not match.');
+    }
+
+    // Проверка на попытку заблокировать самого себя
+    if (ids.includes(currentUserId)) {
+      return res.status(400).json({ message: "You cannot block your own account." });
+    }
+
+    // Блокировка пользователей в базе данных
+    const blockSql = "UPDATE users SET status = 'blocked' WHERE id IN (?)";
+    db.query(blockSql, [ids], (err, result) => {
       if (err) {
-        console.error("Error blocking users:", err);
-        return res.status(500).json({ message: "Internal server error" });
+        return res.status(500).json({ message: "Internal server error." });
+      }
+
+      if (ids.includes(currentUserId)) {
+        return res.status(200).json({ message: "You have been blocked. Logging you out." });
       }
 
       res.status(200).json({ message: `${result.affectedRows} users blocked successfully.` });
     });
   });
-
+});
   app.post("/users/unblock", (req, res) => {
     const { ids } = req.body;
 
@@ -81,42 +178,10 @@ app.post("/users/block", (req, res) => {
     });
   });
 
-  app.post("/login", (req, res) => {
-    const { email, password } = req.body;
 
-    const sql = "SELECT * FROM users WHERE email = ?";
-    db.query(sql, [email], async (err, result) => {
-      if (err) {
-        console.error("Database query error:", err);
-        return res.status(500).json({ Error: "Database query error" });
-      }
-
-      if (result.length > 0) {
-        const user = result[0];
-
-        if (user.status === "blocked") {
-          return res.status(403).json({ Error: "Your account is blocked. Please contact support." });
-        }
-
-        if (password === user.password) {
-          try {
-            await updateLastLogin(user.id);
-            return res.json({ Status: "Success", userId: user.id });
-          } catch (updateErr) {
-            console.error("Error updating last login:", updateErr);
-            return res.status(500).json({ Error: "Error updating last login" });
-          }
-        } else {
-          return res.status(401).json({ Error: "Wrong password" });
-        }
-      } else {
-        return res.status(404).json({ Error: "Email not registered" });
-      }
-    });
-  });
-
-app.get("/users", (req, res) => {
-    const sql = "SELECT id, username AS name, email, last_login AS lastLogin, status FROM users ORDER BY last_login DESC";
+  app.get("/users", authenticateToken, (req, res) => {
+    const sql =
+      "SELECT id, username AS name, email, last_login AS lastLogin, status FROM users ORDER BY last_login DESC";
 
     db.query(sql, (err, result) => {
       if (err) {
@@ -127,8 +192,7 @@ app.get("/users", (req, res) => {
       res.json(result);
     });
   });
-
-app.post("/users/delete", (req, res) => {
+  app.post("/users/delete", authenticateToken, (req, res) => {
     const { ids } = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -144,6 +208,12 @@ app.post("/users/delete", (req, res) => {
         return res.status(500).json({ message: "Internal server error" });
       }
 
+      // Проверка, если текущий пользователь был удалён
+      if (ids.includes(req.user.id)) {
+        return res.status(200).json({ message: "Your account has been deleted." });
+      }
+
+      // Сброс автоинкремента, если пользователей больше нет
       db.query("SELECT COUNT(*) AS count FROM users", (err, rows) => {
         if (err) {
           console.error("Error checking user count:", err);
@@ -163,6 +233,7 @@ app.post("/users/delete", (req, res) => {
       res.status(200).json({ message: `${result.affectedRows} users deleted successfully.` });
     });
   });
+
 
 app.listen(8081, () => {
   console.log("Server is running on port 8081");

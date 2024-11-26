@@ -1,15 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../AuthProvider/AuthProvider';
 import './index.css';
 
-type User = {
+interface User {
   id: number;
   name: string;
   email: string;
-  status: 'active' | 'blocked';
-  lastLogin: string | null | 'Never';
+  lastLogin: string | null;
   activity: number[];
-};
+  status: 'active' | 'blocked';
+  token?: string;
+}
 
 const Home: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -19,36 +21,38 @@ const Home: React.FC = () => {
   const [deletingIds, setDeletingIds] = useState<number[]>([]);
   const currentUserId = 1;
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
+    const token = localStorage.getItem('authToken');
     try {
-      const response = await fetch('http://localhost:8081/users');
-      const data: User[] = await response.json();
-
-      const formattedData = data.map((user) => {
-        let lastLogin = 'Never';
-        if (user.lastLogin) {
-          const date = new Date(user.lastLogin);
-          if (!Number.isNaN(date.getTime())) {
-            lastLogin = date.toLocaleString();
-          }
-        }
-
-        return {
-          ...user,
-          lastLogin,
-        };
+      const response = await fetch('http://localhost:8081/users', {
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      setUsers(formattedData);
+      if (!response.ok) {
+        if (response.status === 401) {
+          alert('Unauthorized. Please log in again.');
+          navigate('/login');
+          return;
+        }
+        throw new Error(`Error: ${response.status}`);
+      }
+      const data = await response.json();
+      setUsers(data);
     } catch (error) {
+      console.error('Fetch error:', error);
       alert('Error fetching users. Please try again later.');
     }
-  };
+  }, [navigate]);
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [fetchUsers]);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const sortUsers = (
     usersList: User[],
@@ -56,18 +60,14 @@ const Home: React.FC = () => {
     ascending = true,
   ): User[] => {
     const parseDate = (value: string | null | 'Never'): number => {
-      if (value === 'Never' || value === null) {
-        return 0; // Если 'Never' или null, считаем их минимальными
-      }
+      if (value === 'Never' || value === null) return 0;
       const date = new Date(value);
-      return Number.isNaN(date.getTime()) ? 0 : date.getTime(); // Используем Number.isNaN
+      return Number.isNaN(date.getTime()) ? 0 : date.getTime();
     };
 
     return [...usersList].sort((a, b) => {
       const valueA = parseDate(a[criteria]);
       const valueB = parseDate(b[criteria]);
-
-      // Сравниваем значения
       if (valueA < valueB) return ascending ? -1 : 1;
       if (valueA > valueB) return ascending ? 1 : -1;
       return 0;
@@ -80,18 +80,31 @@ const Home: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('authToken')}`,
         },
         body: JSON.stringify({ ids: deletingIds }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to delete users.');
+        const { status } = response;
+        if (status === 401) {
+          alert('Unauthorized. Please log in again.');
+          handleLogout();
+        } else if (status === 403) {
+          alert('You are not authorized to perform this action.');
+        } else {
+          throw new Error('Failed to delete users.');
+        }
+        return;
       }
 
-      if (deletingIds.includes(currentUserId)) {
+      const responseData = await response.json();
+      if (
+        responseData.message &&
+        responseData.message === 'Your account has been deleted.'
+      ) {
         alert('Your account has been deleted. Redirecting to login...');
-        localStorage.removeItem('authToken');
-        navigate('/login');
+        handleLogout();
         return;
       }
 
@@ -99,12 +112,10 @@ const Home: React.FC = () => {
         (user) => !deletingIds.includes(user.id),
       );
       setUsers(updatedUsers);
-
       setSelectedIds([]);
       setSelectAll(false);
       setShowModal(false);
-
-      alert('Selected users have been deleted.');
+      alert(responseData.message || 'Selected users have been deleted.');
     } catch (error) {
       alert('Failed to delete users. Please try again.');
     }
@@ -125,11 +136,9 @@ const Home: React.FC = () => {
   };
 
   const handleBlockUsers = async () => {
-    const isCurrentUserSelected = selectedIds.includes(currentUserId);
-    if (isCurrentUserSelected) {
-      alert('You cannot block your own account. You will be logged out.');
-      setSelectedIds(selectedIds.filter((id) => id !== currentUserId));
-      localStorage.removeItem('authToken');
+    const authToken = localStorage.getItem('authToken');
+    if (!authToken) {
+      alert('You must be logged in to block users.');
       navigate('/login');
       return;
     }
@@ -140,19 +149,33 @@ const Home: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ids: selectedIds }),
+        body: JSON.stringify({
+          ids: selectedIds,
+          token: authToken,
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to block users.');
+      const result = await response.json();
+
+      if (
+        result.message.includes('You have been blocked') ||
+        result.message.includes('You cannot block your own account')
+      ) {
+        alert(result.message);
+        localStorage.removeItem('authToken');
+        navigate('/login');
+        return;
       }
 
-      const updatedUsers = users.map((user) =>
-        selectedIds.includes(user.id)
-          ? { ...user, status: 'blocked' as const }
-          : user,
-      );
-      setUsers(updatedUsers);
+      setUsers((prevUsers) => {
+        const updatedUsers = prevUsers.map((user) => {
+          if (selectedIds.includes(user.id)) {
+            return { ...user, status: 'blocked' as const };
+          }
+          return user;
+        });
+        return updatedUsers;
+      });
 
       setSelectedIds([]);
       alert('Selected users have been blocked.');
@@ -171,9 +194,7 @@ const Home: React.FC = () => {
         body: JSON.stringify({ ids: selectedIds }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to unblock users.');
-      }
+      if (!response.ok) throw new Error('Failed to unblock users.');
 
       alert('Selected users have been unblocked.');
       fetchUsers();
@@ -205,36 +226,38 @@ const Home: React.FC = () => {
     <div className="container mt-4">
       <h1>User Table</h1>
 
-      {/* Toolbar */}
-      <div className="toolbar mb-4">
-        <div className="d-flex justify-content-start mb-3">
-          <button
-            type="button"
-            className="btn btn-primary me-3"
-            onClick={handleBlockUsers}
-          >
-            Block
-          </button>
-          <button
-            type="button"
-            className="btn btn-outline-secondary me-3"
-            onClick={handleUnblockUsers}
-            aria-label="Unblock users"
-          >
-            <i className="bi bi-unlock" />
-          </button>
-          <button
-            type="button"
-            className="btn btn-outline-danger"
-            onClick={openDeleteModal}
-            aria-label="Delete users"
-          >
-            <i className="bi bi-trash" />
-          </button>
-        </div>
+      <div className="logout-container">
+        <button type="button" onClick={handleLogout}>
+          Logout
+        </button>
       </div>
 
-      {/* Table */}
+      <div className="toolbar mb-4">
+        <button
+          type="button"
+          className="btn btn-primary me-3"
+          onClick={handleBlockUsers}
+        >
+          Block
+        </button>
+        <button
+          type="button"
+          className="btn btn-outline-secondary me-3"
+          onClick={handleUnblockUsers}
+          aria-label="Select all users"
+        >
+          <i className="bi bi-unlock" />
+        </button>
+        <button
+          type="button"
+          className="btn btn-outline-danger"
+          onClick={openDeleteModal}
+          aria-label="Select all users"
+        >
+          <i className="bi bi-trash" />
+        </button>
+      </div>
+
       <table className="table table-striped table-bordered">
         <thead>
           <tr>
@@ -255,7 +278,12 @@ const Home: React.FC = () => {
         </thead>
         <tbody>
           {sortedUsers.map((user) => (
-            <tr key={user.id}>
+            <tr
+              key={user.id}
+              style={{
+                backgroundColor: user.id === currentUserId ? '#f0f8ff' : '',
+              }}
+            >
               <td>
                 <input
                   type="checkbox"
@@ -274,7 +302,6 @@ const Home: React.FC = () => {
         </tbody>
       </table>
 
-      {/* Modal */}
       {showModal && (
         <div className="modal show d-block" tabIndex={-1} role="dialog">
           <div className="modal-dialog" role="document">

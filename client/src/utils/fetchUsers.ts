@@ -9,7 +9,7 @@ const fetchUsersData = async (userToken: string) => {
 
   try {
     const response = await fetch(
-      'https://task4-server-qwertytr1s-projects.vercel.app/users',
+      'https://task4-server-me06ks0dh-qwertytr1s-projects.vercel.app/users',
       {
         headers: {
           Authorization: `Bearer ${userToken}`,

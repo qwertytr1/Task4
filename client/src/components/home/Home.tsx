@@ -101,7 +101,7 @@ const Home: React.FC = () => {
 
       if (emailsToBlock.includes(userEmail)) {
         const response = await fetch(
-          'https://task4-server-qwertytr1s-projects.vercel.app/block',
+          'https://task4-server-me06ks0dh-qwertytr1s-projects.vercel.app/block',
           {
             method: 'POST',
             headers: {
@@ -129,7 +129,7 @@ const Home: React.FC = () => {
         navigate('/login');
       } else {
         const response = await fetch(
-          'https://task4-server-qwertytr1s-projects.vercel.app/block',
+          'https://task4-server-me06ks0dh-qwertytr1s-projects.vercel.app/block',
           {
             method: 'POST',
             headers: {
@@ -163,7 +163,7 @@ const Home: React.FC = () => {
   const handleUnblockUsers = async () => {
     try {
       const response = await fetch(
-        'https://task4-server-qwertytr1s-projects.vercel.app/unblock',
+        'https://task4-server-me06ks0dh-qwertytr1s-projects.vercel.app/unblock',
         {
           method: 'POST',
           headers: {
@@ -200,7 +200,7 @@ const Home: React.FC = () => {
 
     try {
       const response = await fetch(
-        'https://task4-server-qwertytr1s-projects.vercel.app/delete',
+        'https://task4-server-me06ks0dh-qwertytr1s-projects.vercel.app/delete',
         {
           method: 'POST',
           headers: {

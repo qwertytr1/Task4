@@ -5,16 +5,7 @@ import React, {
   ReactNode,
   useMemo,
 } from 'react';
-
-interface AuthContextType {
-  isAuthenticated: boolean;
-  login: (token: string) => void; // login использует token
-  logout: () => void;
-}
-
-interface AuthProviderProps {
-  children: ReactNode;
-}
+import { AuthContextType, AuthProviderProps } from '../../utils/interfaces';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 

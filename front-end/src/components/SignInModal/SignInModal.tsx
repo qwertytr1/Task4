@@ -26,11 +26,14 @@ function SignInModal() {
         .post('http://localhost:8081/login', values)
         .then((res) => {
           const { Status, token, User } = res.data;
-
+          console.log(User);
           if (Status === 'Success' && token) {
-            // Проверяем, что токен есть
-            login(token);
-            navigate('/home');
+            // Сохраняем token и данные пользователя в localStorage
+            localStorage.setItem('authToken', token);
+            localStorage.setItem('userData', JSON.stringify(User)); // сохраняем объект пользователя
+
+            login(token); // Логируем пользователя
+            navigate('/home'); // Переходим на страницу Home
           } else {
             setErrorMessage('Invalid email or password');
           }

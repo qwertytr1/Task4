@@ -13,19 +13,25 @@ const db = mysql.createConnection({
   database: "db",
 });
 
-const updateLastLogin = (userId) => {
-  return new Promise((resolve, reject) => {
-    const sql = "UPDATE users SET last_login = NOW() WHERE id = ?";
-    db.query(sql, [userId], (err) => {
-      if (err) {
-        console.error("Error updating last login:", err);
-        return reject(err);
-      }
-      resolve();
-    });
+const SECRET_KEY = "123";
+
+// Простой middleware для аутентификации через токен
+const authenticateToken = (req, res, next) => {
+  const token = req.headers["authorization"]?.split(" ")[1]; // Извлекаем токен из заголовка Authorization
+  if (!token) {
+    return res.status(401).json({ Status: "Error", message: "Token is required" });
+  }
+
+  jwt.verify(token, SECRET_KEY, (err, user) => {
+    if (err) {
+      return res.status(403).json({ Status: "Error", message: "Invalid token" });
+    }
+
+    req.user = user; // Сохраняем информацию о пользователе в запросе
+    next();
   });
 };
-const SECRET_KEY = "123";
+
 app.post("/register", (req, res) => {
   const { username, email, password } = req.body;
 
@@ -86,29 +92,21 @@ app.post("/login", (req, res) => {
     });
   });
 });
-// Middleware для проверки токена
 
-app.post("/users/block", (req, res) => {
-  const { tokens } = req.body; // Получаем 'tokens' из тела запроса
+// Блокировка пользователей
+app.post("/users/block", authenticateToken, (req, res) => {
+  const { emails } = req.body; // Получаем 'emails' из тела запроса
 
-  // Check if tokens is an array and non-empty
-  if (!Array.isArray(tokens) || tokens.length === 0) {
-    return res.status(400).json({ message: "Invalid request. 'tokens' must be a non-empty array." });
+  if (!Array.isArray(emails) || emails.length === 0) {
+    return res.status(400).json({ message: "Invalid request. 'emails' must be a non-empty array." });
   }
 
-  // Checking if the user is trying to block their own token
-  const userToken = req.headers.authorization?.split(" ")[1]; // Extract token from Authorization header
-  if (!userToken) {
-    return res.status(401).json({ message: "Authorization token is required." });
-  }
+  const userEmail = req.user.email; // Получаем email текущего пользователя
 
-  if (tokens.includes(userToken)) {
-    return res.status(400).json({ message: "You cannot block your own account." });
-  }
+  // Проверяем, не пытается ли пользователь заблокировать свой собственный аккаунт
 
-  // Update user statuses in the database
-  const blockSql = "UPDATE users SET status = 'blocked' WHERE token IN (?)";
-  db.query(blockSql, [tokens], (err, result) => {
+  const blockSql = "UPDATE users SET status = 'blocked' WHERE email IN (?)";
+  db.query(blockSql, [emails], (err, result) => {
     if (err) {
       console.error("Database error:", err);
       return res.status(500).json({ message: "Internal server error." });
@@ -116,21 +114,30 @@ app.post("/users/block", (req, res) => {
 
     const affectedRows = result.affectedRows;
 
-    // Return the full updated list of users
     const fetchAllUsersSql = "SELECT id, username AS name, email, last_login AS lastLogin, status FROM users";
     db.query(fetchAllUsersSql, (err, allUsersResult) => {
       if (err) {
         console.error("Error fetching updated users:", err);
         return res.status(500).json({ message: "Error fetching updated user list." });
       }
+
       res.status(200).json({ message: `${affectedRows} users blocked successfully.`, users: allUsersResult });
     });
   });
 });
 
-
-
-  app.post("/users/unblock", (req, res) => {
+// Получение списка пользователей
+app.get('/users', authenticateToken, (req, res) => {
+  const sql = "SELECT id, username AS name, email, last_login AS lastLogin, status, token FROM users";
+  db.query(sql, (err, result) => {
+    if (err) {
+      console.error("Error fetching users:", err);
+      return res.status(500).send("Internal server error");
+    }
+    res.json(result);  // Ответ с данными пользователей
+  });
+});
+ app.post("/users/unblock", (req, res) => {
     const { ids } = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -147,81 +154,42 @@ app.post("/users/block", (req, res) => {
 
       res.status(200).json({ message: `${result.affectedRows} users unblocked successfully.` });
     });
-  });
+ });
+  // Удаление пользователей
+app.post("/users/delete", authenticateToken, (req, res) => {
+  const { ids } = req.body; // Получаем 'ids' из тела запроса
 
-
-// Простой middleware для аутентификации через токен
-const authenticateToken = (req, res, next) => {
-  const token = req.headers["authorization"]?.split(" ")[1]; // Извлекаем токен из заголовка Authorization
-  if (!token) {
-    return res.status(401).json({ Status: "Error", message: "Token is required" });
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ message: "Invalid request. 'ids' must be a non-empty array." });
   }
 
-  jwt.verify(token, SECRET_KEY, (err, user) => {
+  const deleteSql = "DELETE FROM users WHERE id IN (?)";
+  db.query(deleteSql, [ids], (err, result) => {
     if (err) {
-      return res.status(403).json({ Status: "Error", message: "Invalid token" });
+      console.error("Database error:", err);
+      return res.status(500).json({ message: "Internal server error." });
     }
 
-    req.user = user; // Сохраняем информацию о пользователе в запросе
-    next();
-  });
-};
+    const affectedRows = result.affectedRows;
 
-// Получение списка пользователей
-app.get('/users', authenticateToken, (req, res) => {
-  const sql = "SELECT id, username AS name, email, last_login AS lastLogin, status FROM users";
-  db.query(sql, (err, result) => {
-    if (err) {
-      console.error("Error fetching users:", err);
-      return res.status(500).send("Internal server error");
-    }
-    res.json(result);  // Ответ с данными пользователей
-  });
-});
-
-  app.post("/users/delete", authenticateToken, (req, res) => {
-    const { ids } = req.body;
-
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: "Invalid request. 'ids' must be a non-empty array." });
-    }
-
-    const deleteSql = "DELETE FROM users WHERE id IN (?)";
-    const resetAutoIncrementSql = "ALTER TABLE users AUTO_INCREMENT = 1";
-
-    db.query(deleteSql, [ids], (err, result) => {
+    const fetchAllUsersSql = "SELECT id, username AS name, email, last_login AS lastLogin, status FROM users";
+    db.query(fetchAllUsersSql, (err, allUsersResult) => {
       if (err) {
-        console.error("Error deleting users:", err);
-        return res.status(500).json({ message: "Internal server error" });
+        console.error("Error fetching updated users:", err);
+        return res.status(500).json({ message: "Error fetching updated user list." });
       }
 
-      // Проверка, если текущий пользователь был удалён
-      if (ids.includes(req.user.id)) {
-        return res.status(200).json({ message: "Your account has been deleted." });
-      }
-
-      // Сброс автоинкремента, если пользователей больше нет
-      db.query("SELECT COUNT(*) AS count FROM users", (err, rows) => {
-        if (err) {
-          console.error("Error checking user count:", err);
-          return res.status(500).json({ message: "Internal server error" });
-        }
-
-        if (rows[0].count === 0) {
-          db.query(resetAutoIncrementSql, (err) => {
-            if (err) {
-              console.error("Error resetting AUTO_INCREMENT:", err);
-              return res.status(500).json({ message: "Internal server error" });
-            }
-          });
-        }
+      res.status(200).json({
+        message: `${affectedRows} users deleted successfully.`,
+        users: allUsersResult,
       });
-
-      res.status(200).json({ message: `${result.affectedRows} users deleted successfully.` });
     });
   });
-
+});
 
 app.listen(8081, () => {
   console.log("Server is running on port 8081");
 });
+
+
+

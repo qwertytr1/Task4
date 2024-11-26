@@ -18,7 +18,11 @@ function CreateAccountPage() {
     setErrorMessage(null);
 
     axios
-      .post('https://task4-server-qwertytr1s-projects.vercel.app/register', { username, email, password })
+      .post('https://task4-server-qwertytr1s-projects.vercel.app/register', {
+        username,
+        email,
+        password,
+      })
       .then((response) => {
         navigate('/login', { state: { email, password } });
       })

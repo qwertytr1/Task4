@@ -25,32 +25,27 @@ function SignInModal() {
       axios
         .post('http://localhost:8081/login', values)
         .then((res) => {
-          const { Status, User } = res.data;
+          const { Status, token, User } = res.data;
+          console.log(User);
+          if (Status === 'Success' && token) {
+            // Сохраняем token и данные пользователя в localStorage
+            localStorage.setItem('authToken', token);
+            localStorage.setItem('userData', JSON.stringify(User)); // сохраняем объект пользователя
 
-          if (Status === 'Success') {
-            if (User?.status === 'blocked') {
-              setErrorMessage(
-                'Your account is blocked. Please contact support.',
-              );
-            } else {
-              login();
-              navigate('/home');
-            }
+            login(token); // Логируем пользователя
+            navigate('/home'); // Переходим на страницу Home
           } else {
             setErrorMessage('Invalid email or password');
           }
         })
         .catch((err) => {
           console.error('Login error:', err);
-
-          const errorMsg =
-            err.response?.data?.message ||
-            'An error occurred. Please try again.';
-          setErrorMessage(errorMsg);
+          setErrorMessage('An error occurred. Please try again.');
         });
     },
     [values, navigate, login, setErrorMessage],
   );
+
   const handleCreateAccountClick = useCallback(() => {
     navigate('/register');
   }, [navigate]);

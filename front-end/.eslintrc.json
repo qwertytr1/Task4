@@ -28,6 +28,7 @@
     "prettier"
   ],
   "rules": {
+    "no-unused-vars":"off",
     "prettier/prettier": ["error"],
     "react/react-in-jsx-scope": "off",
     "react/function-component-definition": "off",

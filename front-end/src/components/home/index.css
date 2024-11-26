@@ -6,7 +6,26 @@ body {
     padding: 0;
     color: #333;
   }
+  .logout-container {
+    display: flex;
+    justify-content: flex-end; /* Выравнивание кнопки по правому краю */
+    margin-bottom: 20px; /* Отступ снизу, чтобы отделить от контента */
+  }
 
+  .logout-container button {
+    background-color: #dc3545; /* Красный фон для кнопки */
+    color: #ffffff; /* Белый текст */
+    font-size: 14px;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+
+  .logout-container button:hover {
+    background-color: #b02a37; /* Более темный красный при наведении */
+  }
   .container {
     max-width: 1200px;
     margin: 20px auto;

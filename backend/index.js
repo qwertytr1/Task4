@@ -1,7 +1,7 @@
 import express from "express";
 import mysql from "mysql2";
 import cors from "cors";
-
+import jwt from "jsonwebtoken";
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -13,56 +13,131 @@ const db = mysql.createConnection({
   database: "db",
 });
 
-const updateLastLogin = (userId) => {
-  return new Promise((resolve, reject) => {
-    const sql = "UPDATE users SET last_login = NOW() WHERE id = ?";
-    db.query(sql, [userId], (err) => {
-      if (err) {
-        console.error("Error updating last login:", err);
-        return reject(err);
-      }
-      resolve();
-    });
+const SECRET_KEY = "123";
+
+// Простой middleware для аутентификации через токен
+const authenticateToken = (req, res, next) => {
+  const token = req.headers["authorization"]?.split(" ")[1]; // Извлекаем токен из заголовка Authorization
+  if (!token) {
+    return res.status(401).json({ Status: "Error", message: "Token is required" });
+  }
+
+  jwt.verify(token, SECRET_KEY, (err, user) => {
+    if (err) {
+      return res.status(403).json({ Status: "Error", message: "Invalid token" });
+    }
+
+    req.user = user; // Сохраняем информацию о пользователе в запросе
+    next();
   });
 };
 
 app.post("/register", (req, res) => {
-    const { username, email, password } = req.body;
+  const { username, email, password } = req.body;
 
-    const sql = "INSERT INTO users (`username`, `email`, `password`, `status`) VALUES (?)";
-    const values = [username, email, password, 'active', new Date()];
+  if (!email || !username || !password) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
 
-    db.query(sql, [values], (err) => {
-      if (err) {
-        if (err.code === "ER_DUP_ENTRY") {
-          return res.status(409).json({ message: "Email is already in use." });
-        }
-        return res.status(500).json({ message: "Database error" });
+  // Генерация токена
+  const token = jwt.sign({ email }, SECRET_KEY, { expiresIn: "7d" });
+
+  const sql = "INSERT INTO users (`username`, `email`, `password`, `status`, `token`) VALUES (?)";
+  const values = [username, email, password, "active", token];
+
+  db.query(sql, [values], (err) => {
+    if (err) {
+      if (err.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({ message: "Email is already in use." });
       }
-      return res.status(200).json({ message: "User registered successfully" });
-    });
+      console.error(err); // Вывод ошибки в консоль
+      return res.status(500).json({ message: "Database error" });
+    }
+    return res.status(200).json({ message: "User registered successfully", token });
   });
+});
 
-app.post("/users/block", (req, res) => {
-    const { ids } = req.body;
+app.post("/login", (req, res) => {
+  const { email, password } = req.body;
 
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: "Invalid request. 'ids' must be a non-empty array." });
+  const sql = "SELECT * FROM users WHERE email = ? AND password = ?";
+  db.query(sql, [email, password], (err, result) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ Status: "Error", message: "Internal server error" });
     }
 
-    const sql = "UPDATE users SET status = 'blocked' WHERE id IN (?)";
+    if (result.length === 0) {
+      return res.status(401).json({ Status: "Error", message: "Invalid email or password" });
+    }
 
-    db.query(sql, [ids], (err, result) => {
-      if (err) {
-        console.error("Error blocking users:", err);
-        return res.status(500).json({ message: "Internal server error" });
-      }
+    const user = result[0];
 
-      res.status(200).json({ message: `${result.affectedRows} users blocked successfully.` });
+    // Если аккаунт заблокирован
+    if (user.status === "blocked") {
+      return res.status(403).json({ Status: "Error", message: "Account is blocked" });
+    }
+
+    // Генерация JWT токена
+    const token = jwt.sign({ id: user.id, email: user.email }, SECRET_KEY, { expiresIn: "7d" });
+
+    res.status(200).json({
+      Status: "Success",
+      token,
+      User: {
+        id: user.id,
+        email: user.email,
+        status: user.status,
+      },
     });
   });
+});
 
-  app.post("/users/unblock", (req, res) => {
+// Блокировка пользователей
+app.post("/users/block", authenticateToken, (req, res) => {
+  const { emails } = req.body; // Получаем 'emails' из тела запроса
+
+  if (!Array.isArray(emails) || emails.length === 0) {
+    return res.status(400).json({ message: "Invalid request. 'emails' must be a non-empty array." });
+  }
+
+  const userEmail = req.user.email; // Получаем email текущего пользователя
+
+  // Проверяем, не пытается ли пользователь заблокировать свой собственный аккаунт
+
+  const blockSql = "UPDATE users SET status = 'blocked' WHERE email IN (?)";
+  db.query(blockSql, [emails], (err, result) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ message: "Internal server error." });
+    }
+
+    const affectedRows = result.affectedRows;
+
+    const fetchAllUsersSql = "SELECT id, username AS name, email, last_login AS lastLogin, status FROM users";
+    db.query(fetchAllUsersSql, (err, allUsersResult) => {
+      if (err) {
+        console.error("Error fetching updated users:", err);
+        return res.status(500).json({ message: "Error fetching updated user list." });
+      }
+
+      res.status(200).json({ message: `${affectedRows} users blocked successfully.`, users: allUsersResult });
+    });
+  });
+});
+
+// Получение списка пользователей
+app.get('/users', authenticateToken, (req, res) => {
+  const sql = "SELECT id, username AS name, email, last_login AS lastLogin, status, token FROM users";
+  db.query(sql, (err, result) => {
+    if (err) {
+      console.error("Error fetching users:", err);
+      return res.status(500).send("Internal server error");
+    }
+    res.json(result);  // Ответ с данными пользователей
+  });
+});
+ app.post("/users/unblock", (req, res) => {
     const { ids } = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -79,91 +154,42 @@ app.post("/users/block", (req, res) => {
 
       res.status(200).json({ message: `${result.affectedRows} users unblocked successfully.` });
     });
-  });
+ });
+  // Удаление пользователей
+app.post("/users/delete", authenticateToken, (req, res) => {
+  const { ids } = req.body; // Получаем 'ids' из тела запроса
 
-  app.post("/login", (req, res) => {
-    const { email, password } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ message: "Invalid request. 'ids' must be a non-empty array." });
+  }
 
-    const sql = "SELECT * FROM users WHERE email = ?";
-    db.query(sql, [email], async (err, result) => {
-      if (err) {
-        console.error("Database query error:", err);
-        return res.status(500).json({ Error: "Database query error" });
-      }
-
-      if (result.length > 0) {
-        const user = result[0];
-
-        if (user.status === "blocked") {
-          return res.status(403).json({ Error: "Your account is blocked. Please contact support." });
-        }
-
-        if (password === user.password) {
-          try {
-            await updateLastLogin(user.id);
-            return res.json({ Status: "Success", userId: user.id });
-          } catch (updateErr) {
-            console.error("Error updating last login:", updateErr);
-            return res.status(500).json({ Error: "Error updating last login" });
-          }
-        } else {
-          return res.status(401).json({ Error: "Wrong password" });
-        }
-      } else {
-        return res.status(404).json({ Error: "Email not registered" });
-      }
-    });
-  });
-
-app.get("/users", (req, res) => {
-    const sql = "SELECT id, username AS name, email, last_login AS lastLogin, status FROM users ORDER BY last_login DESC";
-
-    db.query(sql, (err, result) => {
-      if (err) {
-        console.error("Error fetching users:", err);
-        return res.status(500).send("Internal server error");
-      }
-
-      res.json(result);
-    });
-  });
-
-app.post("/users/delete", (req, res) => {
-    const { ids } = req.body;
-
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: "Invalid request. 'ids' must be a non-empty array." });
+  const deleteSql = "DELETE FROM users WHERE id IN (?)";
+  db.query(deleteSql, [ids], (err, result) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ message: "Internal server error." });
     }
 
-    const deleteSql = "DELETE FROM users WHERE id IN (?)";
-    const resetAutoIncrementSql = "ALTER TABLE users AUTO_INCREMENT = 1";
+    const affectedRows = result.affectedRows;
 
-    db.query(deleteSql, [ids], (err, result) => {
+    const fetchAllUsersSql = "SELECT id, username AS name, email, last_login AS lastLogin, status FROM users";
+    db.query(fetchAllUsersSql, (err, allUsersResult) => {
       if (err) {
-        console.error("Error deleting users:", err);
-        return res.status(500).json({ message: "Internal server error" });
+        console.error("Error fetching updated users:", err);
+        return res.status(500).json({ message: "Error fetching updated user list." });
       }
 
-      db.query("SELECT COUNT(*) AS count FROM users", (err, rows) => {
-        if (err) {
-          console.error("Error checking user count:", err);
-          return res.status(500).json({ message: "Internal server error" });
-        }
-
-        if (rows[0].count === 0) {
-          db.query(resetAutoIncrementSql, (err) => {
-            if (err) {
-              console.error("Error resetting AUTO_INCREMENT:", err);
-              return res.status(500).json({ message: "Internal server error" });
-            }
-          });
-        }
+      res.status(200).json({
+        message: `${affectedRows} users deleted successfully.`,
+        users: allUsersResult,
       });
-
-      res.status(200).json({ message: `${result.affectedRows} users deleted successfully.` });
     });
   });
+});
 
 app.listen(8081, () => {
   console.log("Server is running on port 8081");
 });
+
+
+

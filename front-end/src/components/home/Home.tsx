@@ -19,170 +19,63 @@ const Home: React.FC = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [deletingIds, setDeletingIds] = useState<number[]>([]);
-  const currentUserId = 1;
   const navigate = useNavigate();
   const { logout } = useAuth();
-
-  const fetchUsers = useCallback(async () => {
-    const token = localStorage.getItem('authToken');
-    try {
-      const response = await fetch('http://localhost:8081/users', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) {
-        if (response.status === 401) {
-          alert('Unauthorized. Please log in again.');
-          navigate('/login');
-          return;
-        }
-        throw new Error(`Error: ${response.status}`);
-      }
-      const data = await response.json();
-      setUsers(data);
-    } catch (error) {
-      console.error('Fetch error:', error);
-      alert('Error fetching users. Please try again later.');
-    }
-  }, [navigate]);
+  const [userToken, setUserToken] = useState<string | null>(null);
+  // Получаем данные пользователя из localStorage
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    const token = localStorage.getItem('authToken');
+    setUserToken(token); // Set token state
+  }, []);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+  const fetchUsers = useCallback(async () => {
+    if (!userToken) return; // Prevent fetch if no token
 
-  const sortUsers = (
-    usersList: User[],
-    criteria: 'lastLogin',
-    ascending = true,
-  ): User[] => {
-    const parseDate = (value: string | null | 'Never'): number => {
-      if (value === 'Never' || value === null) return 0;
-      const date = new Date(value);
-      return Number.isNaN(date.getTime()) ? 0 : date.getTime();
-    };
-
-    return [...usersList].sort((a, b) => {
-      const valueA = parseDate(a[criteria]);
-      const valueB = parseDate(b[criteria]);
-      if (valueA < valueB) return ascending ? -1 : 1;
-      if (valueA > valueB) return ascending ? 1 : -1;
-      return 0;
-    });
-  };
-
-  const handleDelete = async () => {
     try {
-      const response = await fetch('http://localhost:8081/users/delete', {
-        method: 'POST',
+      const response = await fetch('http://localhost:8081/users', {
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+          Authorization: `Bearer ${userToken}`,
         },
-        body: JSON.stringify({ ids: deletingIds }),
       });
 
       if (!response.ok) {
-        const { status } = response;
-        if (status === 401) {
-          alert('Unauthorized. Please log in again.');
-          handleLogout();
-        } else if (status === 403) {
-          alert('You are not authorized to perform this action.');
-        } else {
-          throw new Error('Failed to delete users.');
-        }
-        return;
+        throw new Error('Failed to fetch users');
       }
 
-      const responseData = await response.json();
-      if (
-        responseData.message &&
-        responseData.message === 'Your account has been deleted.'
-      ) {
-        alert('Your account has been deleted. Redirecting to login...');
-        handleLogout();
-        return;
-      }
+      const data: User[] = await response.json();
 
-      const updatedUsers = users.filter(
-        (user) => !deletingIds.includes(user.id),
-      );
-      setUsers(updatedUsers);
-      setSelectedIds([]);
-      setSelectAll(false);
-      setShowModal(false);
-      alert(responseData.message || 'Selected users have been deleted.');
-    } catch (error) {
-      alert('Failed to delete users. Please try again.');
-    }
-  };
-
-  const openDeleteModal = () => {
-    if (selectedIds.length === 0) {
-      alert('No users selected for deletion.');
-      return;
-    }
-    setDeletingIds(selectedIds);
-    setShowModal(true);
-  };
-
-  const closeModal = () => {
-    setShowModal(false);
-    setDeletingIds([]);
-  };
-
-  const handleBlockUsers = async () => {
-    const authToken = localStorage.getItem('authToken');
-    if (!authToken) {
-      alert('You must be logged in to block users.');
-      navigate('/login');
-      return;
-    }
-
-    try {
-      const response = await fetch('http://localhost:8081/users/block', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ids: selectedIds,
-          token: authToken,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (
-        result.message.includes('You have been blocked') ||
-        result.message.includes('You cannot block your own account')
-      ) {
-        alert(result.message);
-        localStorage.removeItem('authToken');
-        navigate('/login');
-        return;
-      }
-
-      setUsers((prevUsers) => {
-        const updatedUsers = prevUsers.map((user) => {
-          if (selectedIds.includes(user.id)) {
-            return { ...user, status: 'blocked' as const };
+      const formattedData = data.map((user) => {
+        let lastLogin = 'Never';
+        if (user.lastLogin) {
+          const date = new Date(user.lastLogin);
+          if (!Number.isNaN(date.getTime())) {
+            lastLogin = date.toLocaleString();
           }
-          return user;
-        });
-        return updatedUsers;
+        }
+
+        return {
+          ...user,
+          lastLogin,
+        };
       });
 
-      setSelectedIds([]);
-      alert('Selected users have been blocked.');
+      setUsers(formattedData);
     } catch (error) {
-      alert('Failed to block users. Please try again.');
+      console.error(error);
+      alert('Error fetching users. Please try again later.');
     }
-  };
+  }, [userToken]); // Only recreate fetchUsers when userToken changes
+
+  useEffect(() => {
+    fetchUsers(); // Call fetchUsers when component mounts or userToken changes
+  }, [fetchUsers]); // Dependency array to call it when fetchUsers changes
+
+  const handleLogout = useCallback(() => {
+    logout();
+    localStorage.removeItem('userData'); // Удаляем данные пользователя из localStorage
+    navigate('/login');
+  }, [logout, navigate]);
 
   const handleUnblockUsers = async () => {
     try {
@@ -190,11 +83,14 @@ const Home: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${userToken}`,
         },
         body: JSON.stringify({ ids: selectedIds }),
       });
 
-      if (!response.ok) throw new Error('Failed to unblock users.');
+      if (!response.ok) {
+        throw new Error('Failed to unblock users.');
+      }
 
       alert('Selected users have been unblocked.');
       fetchUsers();
@@ -203,35 +99,119 @@ const Home: React.FC = () => {
     }
   };
 
-  const handleSelectAll = () => {
+  const handleDelete = useCallback(async () => {
+    const usersData = JSON.parse(localStorage.getItem('usersData') || '[]');
+    try {
+      const response = await fetch('http://localhost:8081/users/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete users');
+      }
+
+      const result = await response.json();
+      alert(result.message);
+
+      const updatedUsers = usersData.filter(
+        (user: any) => !selectedIds.includes(user.id),
+      );
+      localStorage.setItem('usersData', JSON.stringify(updatedUsers));
+      setUsers(updatedUsers);
+      setSelectedIds([]);
+    } catch (error) {
+      console.error(error);
+      alert('Failed to delete users. Please try again.');
+    }
+  }, [selectedIds, userToken]);
+
+  const openDeleteModal = useCallback(() => {
+    if (selectedIds.length === 0) {
+      alert('No users selected for deletion.');
+      return;
+    }
+    setDeletingIds(selectedIds);
+    setShowModal(true);
+  }, [selectedIds]);
+
+  const closeModal = useCallback(() => {
+    setShowModal(false);
+    setDeletingIds([]);
+  }, []);
+
+  const handleBlockUsers = useCallback(async () => {
+    const usersData = JSON.parse(localStorage.getItem('usersData') || '[]');
+
+    // Collect tokens of the selected users
+    const selectedUserTokens = selectedIds.map(
+      (id) => usersData.find((user: any) => user.id === id)?.token,
+    );
+
+    try {
+      const response = await fetch('http://localhost:8081/users/block', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify({ ids: selectedIds, tokens: selectedUserTokens }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to block users');
+      }
+
+      const result = await response.json();
+      alert(result.message);
+
+      // Update the users list with the one returned from the backend
+      const updatedUsers = result.users; // Use the updated list from the backend response
+
+      // Store the updated user data
+      localStorage.setItem('usersData', JSON.stringify(updatedUsers));
+
+      // Update the state with the updated user list
+      setUsers(updatedUsers);
+      setSelectedIds([]); // Clear the selected users
+    } catch (error) {
+      console.error(error);
+      alert('Failed to block users. Please try again.');
+    }
+  }, [selectedIds, userToken]);
+
+  const handleSelectAll = useCallback(() => {
     if (selectAll) {
       setSelectedIds([]);
     } else {
       setSelectedIds(users.map((u) => u.id));
     }
     setSelectAll(!selectAll);
-  };
+  }, [selectAll, users]);
 
-  const handleCheckboxChange = (id: number) => {
-    const updatedSelectedIds = selectedIds.includes(id)
-      ? selectedIds.filter((userId) => userId !== id)
-      : [...selectedIds, id];
-    setSelectedIds(updatedSelectedIds);
-    setSelectAll(updatedSelectedIds.length === users.length);
-  };
-
-  const sortedUsers = sortUsers(users, 'lastLogin', false);
+  const handleCheckboxChange = useCallback(
+    (id: number) => {
+      const updatedSelectedIds = selectedIds.includes(id)
+        ? selectedIds.filter((userId) => userId !== id)
+        : [...selectedIds, id];
+      setSelectedIds(updatedSelectedIds);
+      setSelectAll(updatedSelectedIds.length === users.length);
+    },
+    [selectedIds, users.length],
+  );
 
   return (
     <div className="container mt-4">
       <h1>User Table</h1>
-
       <div className="logout-container">
         <button type="button" onClick={handleLogout}>
           Logout
         </button>
       </div>
-
       <div className="toolbar mb-4">
         <button
           type="button"
@@ -244,20 +224,17 @@ const Home: React.FC = () => {
           type="button"
           className="btn btn-outline-secondary me-3"
           onClick={handleUnblockUsers}
-          aria-label="Select all users"
         >
-          <i className="bi bi-unlock" />
+          Unblock
         </button>
         <button
           type="button"
           className="btn btn-outline-danger"
           onClick={openDeleteModal}
-          aria-label="Select all users"
         >
-          <i className="bi bi-trash" />
+          Delete
         </button>
       </div>
-
       <table className="table table-striped table-bordered">
         <thead>
           <tr>
@@ -266,7 +243,7 @@ const Home: React.FC = () => {
                 type="checkbox"
                 checked={selectAll}
                 onChange={handleSelectAll}
-                aria-label="Select all users"
+                aria-label="Select user with ID"
               />
             </th>
             <th>ID</th>
@@ -277,12 +254,14 @@ const Home: React.FC = () => {
           </tr>
         </thead>
         <tbody>
-          {sortedUsers.map((user) => (
+          {users.map((user) => (
             <tr
               key={user.id}
-              style={{
-                backgroundColor: user.id === currentUserId ? '#f0f8ff' : '',
-              }}
+              style={
+                {
+                  // backgroundColor: user.id ===  ? '#f0f8ff' : '',
+                }
+              }
             >
               <td>
                 <input
@@ -295,25 +274,27 @@ const Home: React.FC = () => {
               <td>{user.id}</td>
               <td>{user.name}</td>
               <td>{user.email}</td>
-              <td>{user.lastLogin}</td>
-              <td>{user.status === 'active' ? 'Active' : 'Blocked'}</td>
+              <td>{user.lastLogin || 'N/A'}</td>
+              <td>{user.status}</td>
             </tr>
           ))}
         </tbody>
       </table>
-
       {showModal && (
-        <div className="modal show d-block" tabIndex={-1} role="dialog">
-          <div className="modal-dialog" role="document">
+        <div className="modal d-block" tabIndex={-1} aria-hidden="true">
+          <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title">Confirm Deletion</h5>
+                <h5 className="modal-title">Delete User(s)</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={closeModal}
+                  aria-label="Close"
+                />
               </div>
               <div className="modal-body">
-                <p>
-                  Are you sure you want to delete{' '}
-                  <strong>{deletingIds.length}</strong> users?
-                </p>
+                <p>Are you sure you want to delete the selected users?</p>
               </div>
               <div className="modal-footer">
                 <button
@@ -321,14 +302,14 @@ const Home: React.FC = () => {
                   className="btn btn-secondary"
                   onClick={closeModal}
                 >
-                  Cancel
+                  Close
                 </button>
                 <button
                   type="button"
                   className="btn btn-danger"
                   onClick={handleDelete}
                 >
-                  Confirm
+                  Delete
                 </button>
               </div>
             </div>

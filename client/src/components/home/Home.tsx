@@ -101,7 +101,7 @@ const Home: React.FC = () => {
 
       if (emailsToBlock.includes(userEmail)) {
         const response = await fetch(
-          'https://task4-server-qwertytr1s-projects.vercel.app/block',
+          'https://task4-server-qwertytr1s-projects.vercel.app/block'
           {
             method: 'POST',
             headers: {

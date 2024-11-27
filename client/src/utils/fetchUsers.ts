@@ -8,11 +8,14 @@ const fetchUsersData = async (userToken: string) => {
   }
 
   try {
-    const response = await fetch('https://task4-server-qwertytr1s-projects.vercel.app/users', {
-      headers: {
-        Authorization: `Bearer ${userToken}`,
+    const response = await fetch(
+      'https://task4-server-qwertytr1s-projects.vercel.app/users',
+      {
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+        },
       },
-    });
+    );
 
     if (!response.ok) {
       throw new Error('Failed to fetch users');

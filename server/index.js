@@ -12,7 +12,7 @@ const db = mysql.createConnection({
   password: "Ilya20040208",
   database: "db",
 });
-
+const PORT = 8081;
 const SECRET_KEY = "123";
 const updateLastLogin = (userId) => {
   return new Promise((resolve, reject) => {
@@ -210,7 +210,7 @@ app.get('/users', authenticateToken, (req, res) => {
     });
   });
 
-app.listen(8081, () => {
+app.listen(PORT, () => {
   console.log("Server is running on port 8081");
 });
 

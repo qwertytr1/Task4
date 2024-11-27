@@ -24,7 +24,7 @@ function SignInModal() {
 
       axios
         .post(
-          'https://task4-server-me06ks0dh-qwertytr1s-projects.vercel.app/login',
+          'https://task4-server-qwertytr1s-projects.vercel.app/login',
           values,
         )
         .then((res) => {
